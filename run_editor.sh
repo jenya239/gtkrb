@@ -1,2 +1,3 @@
-#!/bin/bash
-GTK_THEME=Adwaita ruby editor.rb 
+#!/usr/bin/bash
+export GTK_THEME=Adwaita
+ruby editor.rb 
