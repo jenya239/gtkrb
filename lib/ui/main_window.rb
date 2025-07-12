@@ -27,13 +27,18 @@ class MainWindow
     paned = Gtk::Paned.new(:horizontal)
     paned.set_start_child(@file_explorer.widget)
     paned.set_end_child(@code_editor.widget)
-    paned.set_position(250)
+    paned.set_position(200)  # Уменьшаем позицию для компактной панели
     @win.set_child(paned)
   end
 
   def connect_signals
     @file_explorer.on_file_selected do |file_path|
       @code_editor.load_file(file_path)
+      update_title(file_path)
     end
+  end
+
+  def update_title(file_path)
+    @win.set_title("Editor - #{file_path}")
   end
 end 
