@@ -1,4 +1,4 @@
-require 'gtksourceview5'
+require 'gtksourceview3'
 
 class LanguageManager
   def initialize

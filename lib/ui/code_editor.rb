@@ -1,6 +1,6 @@
-require 'gtk4'
-require 'gtksourceview5'
-require_relative '../core/language_manager'
+require 'gtk3'
+require 'gtksourceview3'
+require_relative '../../utils/language_manager'
 require_relative 'widgets/minimap'
 
 class CodeEditor
@@ -15,7 +15,7 @@ class CodeEditor
 
   def widget
     scrolled = Gtk::ScrolledWindow.new
-    scrolled.set_child(@view)
+    scrolled.add(@view)
     scrolled.set_hexpand(true)
     scrolled.set_vexpand(true)
     scrolled
@@ -74,16 +74,14 @@ class CodeEditor
       end
     end
     # Ctrl+S
-    key = Gtk::EventControllerKey.new
-    key.signal_connect("key-pressed") do |_, keyval, _, state|
-      if keyval == Gdk::Keyval::KEY_s && (state & Gdk::ModifierType::CONTROL_MASK) != 0
+    @view.signal_connect("key-press-event") do |_, event|
+      if event.keyval == Gdk::Keyval::KEY_s && (event.state & Gdk::ModifierType::CONTROL_MASK) != 0
         save_file
         true
       else
         false
       end
     end
-    @view.add_controller(key)
   end
 
   def emit_modified

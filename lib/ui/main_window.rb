@@ -1,10 +1,10 @@
-require 'gtk4'
+require 'gtk3'
 require_relative 'file_explorer'
 require_relative 'code_editor'
 
 class MainWindow
   def initialize(application)
-    @win = Gtk::ApplicationWindow.new(application)
+    @win = Gtk::Window.new
     @file_explorer = FileExplorer.new
     @code_editor = CodeEditor.new
     setup_window
@@ -14,7 +14,7 @@ class MainWindow
   end
 
   def present
-    @win.present
+    @win.show_all
   end
 
   private
@@ -22,14 +22,15 @@ class MainWindow
   def setup_window
     @win.set_title("Editor")
     @win.set_default_size(1200, 700)
+    @win.signal_connect("destroy") { Gtk.main_quit }
   end
 
   def setup_layout
     paned = Gtk::Paned.new(:horizontal)
-    paned.set_start_child(@file_explorer.widget)
-    paned.set_end_child(@code_editor.widget)
+    paned.pack1(@file_explorer.widget, resize: false, shrink: true)
+    paned.pack2(@code_editor.widget, resize: true, shrink: true)
     paned.set_position(200)
-    @win.set_child(paned)
+    @win.add(paned)
   end
 
   def connect_signals

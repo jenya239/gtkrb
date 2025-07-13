@@ -1,4 +1,4 @@
-require 'gtk4'
+require 'gtk3'
 require 'cairo'
 
 class Minimap < Gtk::DrawingArea
@@ -20,30 +20,36 @@ class Minimap < Gtk::DrawingArea
 
   def setup_minimap
     set_size_request(100, -1)
-    set_draw_func { |widget, cr, width, height| draw_minimap(widget, cr, width, height) }
+    signal_connect("draw") { |widget, cr| draw_minimap(widget, cr) }
   end
 
   def connect_signals
     @buffer.signal_connect("changed") { queue_draw }
     @source_view.vadjustment.signal_connect("value-changed") { queue_draw }
-    click = Gtk::GestureClick.new
-    click.signal_connect("pressed") do |gesture, n_press, x, y|
-      handle_click(x, y)
+    signal_connect("button-press-event") do |_, event|
+      handle_click(event.x, event.y)
+      true
     end
-    add_controller(click)
   end
 
-  def draw_minimap(widget, cr, width, height)
-    return if @buffer.text.empty?
+  def draw_minimap(widget, cr)
+    allocation = widget.allocation
+    width = allocation.width
+    height = allocation.height
+    
+    return false if @buffer.text.empty?
+    
     cr.set_source_rgb(0.92, 0.92, 0.90)
     cr.paint
     cr.set_source_rgb(0.8, 0.8, 0.8)
     cr.set_line_width(1)
     cr.rectangle(0, 0, width, height)
     cr.stroke
+    
     @total_lines = @buffer.line_count
     @visible_lines = height / @line_height
     @scroll_offset = @source_view.vadjustment.value
+    
     lines = @buffer.text.split("\n")
     lines.each_with_index do |line, line_num|
       y = line_num * @line_height
@@ -53,9 +59,11 @@ class Minimap < Gtk::DrawingArea
       cr.rectangle(1, y, width - 2, @line_height)
       cr.fill
     end
+    
     visible_start = @scroll_offset / @source_view.vadjustment.upper
     visible_height = (@source_view.vadjustment.page_size / @source_view.vadjustment.upper) * height
     visible_y = visible_start * height
+    
     cr.set_source_rgba(0.2, 0.5, 0.9, 0.18)
     cr.rectangle(0, visible_y, width, visible_height)
     cr.fill
@@ -63,6 +71,8 @@ class Minimap < Gtk::DrawingArea
     cr.set_line_width(1)
     cr.rectangle(0, visible_y, width, visible_height)
     cr.stroke
+    
+    false
   end
 
   def get_line_color(line)

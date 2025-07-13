@@ -1,36 +1,32 @@
-# GTK4 Multi-Editor
+# GTK3 Ruby Editor
 
-Минималистичный редактор кода на Ruby с GTK4 и GtkSourceView5.
-
-## Особенности
-
-- 3 колонки с изменяемым размером
-- Подсветка синтаксиса для Ruby, Python и JavaScript
-- Номера строк
-- Подсветка текущей строки
-- Заголовки файлов над каждым редактором
-- Растягивание редакторов на всю высоту
+Простой текстовый редактор на Ruby с GTK3.
 
 ## Установка зависимостей
 
 ```bash
-sudo apt install libgtk-4-dev libgtksourceview-5-dev
-gem install gtk4 gtksourceview5
+sudo apt install ruby-gtk3 libgtk-3-dev libgtksourceview-3.0-dev
+gem install gtksourceview3
 ```
 
 ## Запуск
 
 ```bash
-./run_editor.sh
+ruby editor.rb
 ```
 
-или
+## Структура проекта
 
-```bash
-GTK_THEME=Adwaita ruby editor.rb
-```
+- `editor.rb` - точка входа
+- `lib/ui/` - пользовательский интерфейс
+- `lib/core/` - основная логика
+- `test/` - тесты
 
-## Структура
+## Возможности
 
-- `editor.rb` - основной файл приложения
-- `run_editor.sh` - скрипт для запуска с правильной темой 
+- Файловый браузер
+- Подсветка синтаксиса
+- Минимап
+- Виртуализированное дерево файлов 
+
+test
