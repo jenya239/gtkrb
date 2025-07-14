@@ -8,27 +8,27 @@ class FileExplorer
     @scrolled.set_hexpand(true)
     @scrolled.set_vexpand(true)
     
-    # Стилизация скроллбара
+    # Стилизация скроллбара в Matrix+Giger стиле
     setup_scrollbar_style
     
     @scrolled.add(@tree_widget)
     
-    # Стиль path label в solarized lite
+    # Стиль path label в Matrix+Giger стиле
     @label = Gtk::Label.new(truncate_path(@tree_widget.current_path))
     @label.set_xalign(0)
     @label.set_hexpand(true)
     @label.set_vexpand(false)
-    @label.override_font(Pango::FontDescription.new('Sans 8'))
-    @label.override_color(:normal, Gdk::RGBA::new(0.345, 0.431, 0.459, 1.0))  # Solarized base01
+    @label.override_font(Pango::FontDescription.new('Monospace Bold 8'))
+    @label.override_color(:normal, Gdk::RGBA::new(0.0, 1.0, 0.2, 0.9))  # Matrix green
     
     @box = Gtk::Box.new(:vertical, 0)
     @box.set_hexpand(true)
     @box.set_vexpand(true)
-    @box.override_background_color(:normal, Gdk::RGBA::new(0.992, 0.965, 0.890, 1.0))  # Solarized base3
-    @scrolled.override_background_color(:normal, Gdk::RGBA::new(0.992, 0.965, 0.890, 1.0))
-    @tree_widget.override_background_color(:normal, Gdk::RGBA::new(0.992, 0.965, 0.890, 1.0))
+    @box.override_background_color(:normal, Gdk::RGBA::new(0.05, 0.05, 0.05, 1.0))  # Deep black
+    @scrolled.override_background_color(:normal, Gdk::RGBA::new(0.05, 0.05, 0.05, 1.0))
+    @tree_widget.override_background_color(:normal, Gdk::RGBA::new(0.05, 0.05, 0.05, 1.0))
     
-    @box.pack_start(@label, expand: false, fill: true, padding: 2)
+    @box.pack_start(@label, expand: false, fill: true, padding: 3)
     @box.pack_start(@scrolled, expand: true, fill: true, padding: 0)
     @box.set_size_request(-1, 300)
     setup_signals
@@ -103,36 +103,38 @@ class FileExplorer
   end
   
   def setup_scrollbar_style
-    # Создаем CSS провайдер для стилизации скроллбара
+    # Создаем CSS провайдер для Matrix+Giger скроллбара
     css_provider = Gtk::CssProvider.new
     css_provider.load_from_data(<<~CSS)
       scrolledwindow {
-        background: transparent;
+        background: rgba(13, 13, 13, 1.0);
       }
       
       scrollbar {
-        background: transparent;
+        background: rgba(13, 13, 13, 1.0);
         border: none;
         border-radius: 0;
       }
       
       scrollbar slider {
-        background: rgba(88, 110, 117, 0.3);
-        border: none;
-        border-radius: 4px;
-        min-width: 6px;
-        min-height: 6px;
+        background: rgba(0, 255, 51, 0.4);
+        border: 1px solid rgba(0, 255, 51, 0.6);
+        border-radius: 2px;
+        min-width: 8px;
+        min-height: 8px;
         margin: 1px;
       }
       
       scrollbar:hover slider {
-        background: rgba(88, 110, 117, 0.6);
-        min-width: 8px;
+        background: rgba(0, 255, 51, 0.7);
+        border: 1px solid rgba(255, 0, 0, 0.8);
+        min-width: 10px;
+        box-shadow: 0 0 4px rgba(0, 255, 51, 0.5);
       }
       
       scrollbar trough {
-        background: transparent;
-        border: none;
+        background: rgba(77, 77, 92, 0.3);
+        border: 1px solid rgba(77, 77, 92, 0.5);
       }
       
       scrollbar button {

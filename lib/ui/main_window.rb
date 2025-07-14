@@ -1,16 +1,16 @@
 require 'gtk3'
 require_relative 'file_explorer'
-require_relative 'code_editor'
+require_relative 'editor_manager'
 
 class MainWindow
   def initialize(application)
     @win = Gtk::Window.new
     @file_explorer = FileExplorer.new
-    @code_editor = CodeEditor.new
+    @editor_manager = EditorManager.new
     setup_window
     setup_layout
     connect_signals
-    @code_editor.on_modified { update_title }
+    @editor_manager.on_modified { update_title }
   end
 
   def present
@@ -28,25 +28,58 @@ class MainWindow
   def setup_layout
     paned = Gtk::Paned.new(:horizontal)
     paned.pack1(@file_explorer.widget, resize: false, shrink: true)
-    paned.pack2(@code_editor.widget, resize: true, shrink: true)
-    paned.set_position(200)
+    paned.pack2(@editor_manager.widget, resize: true, shrink: true)
+    paned.set_position(300)
     @win.add(paned)
   end
 
   def connect_signals
     @file_explorer.on_file_selected do |file_path|
-      @code_editor.load_file(file_path)
+      @editor_manager.load_file(file_path)
       update_title
+    end
+    
+    # Горячие клавиши
+    @win.signal_connect('key-press-event') do |widget, event|
+      handle_key_press(event)
     end
   end
 
   def update_title
-    path = @code_editor.file_path
-    mark = @code_editor.modified? ? "*" : ""
-    if path
-      @win.set_title("Editor#{mark} - #{path}")
+    active_pane = @editor_manager.get_active_pane
+    if active_pane && active_pane.get_current_editor
+      editor = active_pane.get_current_editor
+      path = editor.file_path
+      mark = editor.modified? ? "*" : ""
+      if path
+        @win.set_title("Editor#{mark} - #{File.basename(path)}")
+      else
+        @win.set_title("Editor")
+      end
     else
       @win.set_title("Editor")
     end
+  end
+
+  def handle_key_press(event)
+    # Ctrl+Shift+E - горизонтальное разделение
+    if event.state.control_mask? && event.state.shift_mask? && event.keyval == Gdk::Keyval::KEY_E
+      @editor_manager.split_horizontal
+      return true
+    end
+    
+    # Ctrl+Shift+O - вертикальное разделение
+    if event.state.control_mask? && event.state.shift_mask? && event.keyval == Gdk::Keyval::KEY_O
+      @editor_manager.split_vertical
+      return true
+    end
+    
+    # Ctrl+W - закрыть панель
+    if event.state.control_mask? && event.keyval == Gdk::Keyval::KEY_w
+      @editor_manager.close_active_pane
+      return true
+    end
+    
+    false
   end
 end 
