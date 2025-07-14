@@ -66,7 +66,6 @@ class SplitContainer
 
     # Создаем новый Paned
     paned = Gtk::Paned.new(orientation)
-    paned.set_position(orientation == :horizontal ? 400 : 300)
     
     # Заменяем существующий виджет новым Paned контейнером
     parent = existing_info[:parent]
@@ -86,22 +85,25 @@ class SplitContainer
       @main_widget.remove(existing_widget)
       @main_widget.pack_start(paned, expand: true, fill: true, padding: 0)
     end
-
-    # Добавляем панели в новый Paned
+    
+    # Помещаем панели в новый Paned
     paned.pack1(existing_widget, resize: true, shrink: true)
     paned.pack2(new_pane.widget, resize: true, shrink: true)
-
-    # Обновляем информацию о панелях
-    @panes[existing_pane] = { 
-      widget: existing_widget, 
-      parent: paned 
-    }
-    @panes[new_pane] = { 
-      widget: new_pane.widget, 
-      parent: paned 
-    }
-
+    
+    # Показываем все виджеты
     paned.show_all
+    
+    # Устанавливаем позицию для деления пополам
+    paned.set_position(orientation == :horizontal ? 400 : 300)
+    
+    # Обновляем информацию о панелях
+    @panes[existing_pane][:parent] = paned
+    @panes[new_pane] = { widget: new_pane.widget, parent: paned }
+    
+    # Если это была root панель, обновляем root
+    if @root == existing_pane
+      @root = nil  # Теперь root - это paned контейнер
+    end
   end
 
   def find_sibling(paned, target_pane)

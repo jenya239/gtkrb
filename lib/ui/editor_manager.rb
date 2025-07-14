@@ -69,8 +69,24 @@ class EditorManager
     
     pane.on_focus { |p| @active_pane = p }
     pane.on_modified { emit_modified }
+    pane.on_button { |clicked_pane| swap_with_active(clicked_pane) }
     
     pane
+  end
+
+  def swap_with_active(clicked_pane)
+    return unless @active_pane
+    return if @active_pane == clicked_pane
+    return unless @active_pane.has_file? && clicked_pane.has_file?
+    
+    # Меняем файлы местами
+    active_file = @active_pane.get_current_file
+    clicked_file = clicked_pane.get_current_file
+    
+    @active_pane.load_file(clicked_file)
+    clicked_pane.load_file(active_file)
+    
+    emit_modified
   end
 
   def close_pane(pane)
