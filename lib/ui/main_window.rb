@@ -39,6 +39,11 @@ class MainWindow
       update_title
     end
     
+    # Обновляем панель файлов при сохранении
+    @editor_manager.on_file_saved do |file_path|
+      @file_explorer.refresh
+    end
+    
     # Горячие клавиши
     @win.signal_connect('key-press-event') do |widget, event|
       handle_key_press(event)

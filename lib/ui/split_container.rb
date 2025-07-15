@@ -93,8 +93,13 @@ class SplitContainer
     # Показываем все виджеты
     paned.show_all
     
-    # Устанавливаем позицию для деления пополам
-    paned.set_position(orientation == :horizontal ? 400 : 300)
+    # Устанавливаем позицию для деления пополам после отрисовки
+    GLib::Idle.add do
+      allocation = paned.allocation
+      half_size = orientation == :horizontal ? allocation.width / 2 : allocation.height / 2
+      paned.set_position(half_size) if half_size > 0
+      false
+    end
     
     # Обновляем информацию о панелях
     @panes[existing_pane][:parent] = paned

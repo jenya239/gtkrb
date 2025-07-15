@@ -3,6 +3,7 @@ require_relative '../../core/tree_controller'
 require_relative '../../core/tree_events'
 require_relative '../../core/file_tree_model'
 require_relative '../../presentation/tree_theme'
+require_relative '../../presentation/matrix_giger_theme'
 require_relative '../../input/input_controller'
 require_relative 'gtk3_cairo_renderer'
 require_relative 'gtk3_event_adapter'
@@ -18,7 +19,8 @@ class GTK3TreeWidget < Gtk::DrawingArea
     @events = TreeEvents.new
     @tree_controller = TreeController.new(@model, @model.state, @events)
     
-    @theme = TreeTheme.new
+    # Используем новую Matrix+Giger тему!
+    @theme = MatrixGigerTheme.new
     @renderer = GTK3CairoRenderer.new(@theme)
     @input_controller = InputController.new(@tree_controller, @renderer)
     

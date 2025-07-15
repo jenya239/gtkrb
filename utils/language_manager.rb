@@ -8,7 +8,9 @@ class LanguageManager
       '.rb' => 'ruby',
       '.py' => 'python', 
       '.js' => 'js',  # Изменил с 'javascript' на 'js'
-      '.ts' => 'typescript',
+      '.jsx' => 'js',  # JSX -> JavaScript highlighting
+      '.ts' => 'js',  # TypeScript -> JavaScript highlighting
+      '.tsx' => 'js',  # TSX -> JavaScript highlighting
       '.html' => 'html',
       '.css' => 'css',
       '.json' => 'json',

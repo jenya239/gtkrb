@@ -13,15 +13,18 @@ class CodeEditor
     @highlighting_enabled = true
     @current_load_id = 0
     @pending_highlight_sources = []
+    
+    # Создаем ScrolledWindow один раз
+    @scrolled = Gtk::ScrolledWindow.new
+    @scrolled.add(@view)
+    @scrolled.set_hexpand(true)
+    @scrolled.set_vexpand(true)
+    
     setup_editor
   end
 
   def widget
-    scrolled = Gtk::ScrolledWindow.new
-    scrolled.add(@view)
-    scrolled.set_hexpand(true)
-    scrolled.set_vexpand(true)
-    scrolled
+    @scrolled
   end
 
   def load_file(file_path)
@@ -59,6 +62,23 @@ class CodeEditor
 
   def on_modified(&block)
     @on_modified = block
+  end
+
+  def get_content
+    @buffer.text
+  end
+
+  def set_content(content)
+    @buffer.text = content
+    @modified = false
+  end
+
+  def on_save_request(&block)
+    @on_save_request = block
+  end
+
+  def request_save
+    @on_save_request.call if @on_save_request
   end
 
   def force_refresh_highlighting
@@ -177,49 +197,18 @@ class CodeEditor
 
   def setup_editor
     @view.set_show_line_numbers(true)
-    @view.set_highlight_current_line(true)
-    
-    # Оптимизированные настройки (исправляем enum-ы)
-    @view.set_show_right_margin(false)
-    begin
-      @view.set_smart_home_end(GtkSource::SmartHomeEndType::DISABLED)
-    rescue
-      # Fallback если enum недоступен
-      puts "Warning: Could not set smart_home_end"
-    end
-    @buffer.set_highlight_matching_brackets(true)
-    @buffer.set_highlight_syntax(true)
-    
-    # Стиль шрифта
-    css_provider = Gtk::CssProvider.new
-    css_provider.load_from_data("textview { font-family: 'Fira Mono', monospace; font-size: 10px; }")
-    @view.style_context.add_provider(css_provider, 600)
-    
-    # Настройки редактирования
-    @view.set_wrap_mode(:word_char)
-    @view.set_auto_indent(true)
+    @view.set_monospace(true)
     @view.set_tab_width(2)
+    @view.set_auto_indent(true)
     @view.set_indent_width(2)
-    @view.set_insert_spaces_instead_of_tabs(true)
     
-    # Отслеживание изменений
-    @buffer.signal_connect("changed") do
-      unless @modified
-        @modified = true
-        emit_modified
-      end
-    end
+    # Обработка изменений
+    @buffer.signal_connect('changed') { mark_modified }
     
-    # Горячие клавиши
-    @view.signal_connect("key-press-event") do |_, event|
-      if event.keyval == Gdk::Keyval::KEY_s && (event.state & Gdk::ModifierType::CONTROL_MASK) != 0
-        save_file
-        true
-      elsif event.keyval == Gdk::Keyval::KEY_h && (event.state & Gdk::ModifierType::CONTROL_MASK) != 0
-        toggle_highlighting
-        true
-      elsif event.keyval == Gdk::Keyval::KEY_r && (event.state & Gdk::ModifierType::CONTROL_MASK) != 0
-        force_refresh_highlighting
+    # Обработка горячих клавиш
+    @view.signal_connect('key-press-event') do |widget, event|
+      if event.state.control_mask? && event.keyval == Gdk::Keyval::KEY_s
+        request_save
         true
       else
         false
@@ -229,5 +218,12 @@ class CodeEditor
 
   def emit_modified
     @on_modified.call if @on_modified
+  end
+
+  def mark_modified
+    unless @modified
+      @modified = true
+      emit_modified
+    end
   end
 end 
