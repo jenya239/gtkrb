@@ -32,6 +32,10 @@ class EditorPane
     @current_file = file_path
     @is_new_file = false
     @current_editor.load_file(file_path)
+    
+    # Настраиваем обработку сохранения для существующего файла
+    @current_editor.on_save_request { handle_save_request }
+    
     update_file_label
     emit_focus
   end
@@ -53,11 +57,7 @@ class EditorPane
   end
 
   def has_file?
-    # Файл есть если есть содержимое в редакторе или сохраненный файл
-    content = @current_editor.get_content.strip
-    result = content.length > 0 || (@current_file != nil && !@is_new_file)
-    puts "has_file? for #{@pane_id}: content_length=#{content.length}, file=#{@current_file}, is_new=#{@is_new_file}, result=#{result}"
-    result
+    !@current_file.nil? && !@is_new_file
   end
 
   def on_focus(&block)
@@ -98,15 +98,14 @@ class EditorPane
 
   def set_focus
     @current_editor.widget.grab_focus
-    emit_focus
   end
 
   def set_active_style
-    @file_info_box.override_background_color(:normal, Gdk::RGBA::new(0.25, 0.25, 0.25, 1.0))
+    @box.override_background_color(:normal, Gdk::RGBA::new(0.25, 0.25, 0.25, 1.0))
   end
 
   def set_inactive_style
-    @file_info_box.override_background_color(:normal, Gdk::RGBA::new(0.18, 0.18, 0.18, 1.0))
+    @box.override_background_color(:normal, Gdk::RGBA::new(0.2, 0.2, 0.2, 1.0))
   end
 
   def is_new_file?
@@ -154,6 +153,39 @@ class EditorPane
     # Показываем виджеты
     @current_editor.widget.show_all
     my_editor.widget.show_all
+  end
+
+  def get_swap_data
+    editor = @current_editor
+    result = {
+      file_path: @current_file,
+      content: editor.get_content,
+      cursor_position: editor.get_cursor_position,
+      language: editor.instance_variable_get(:@language)
+    }
+    result
+  end
+
+  def apply_swap_data(data)
+    editor = @current_editor
+    
+    # Сохраняем старый файл
+    old_file = @current_file
+    
+    # Применяем новые данные
+    @current_file = data[:file_path]
+    @is_new_file = false
+    
+    editor.set_content(data[:content])
+    editor.set_cursor_position(data[:cursor_position]) if data[:cursor_position]
+    
+    # Настраиваем обработку сохранения
+    @current_editor.on_save_request { handle_save_request }
+    
+    # Обновляем интерфейс
+    update_file_label
+    
+    result
   end
 
   private
@@ -216,7 +248,10 @@ class EditorPane
     @box.pack_start(@current_editor.widget, expand: true, fill: true, padding: 0)
     
     # Подключаем обработчики
-    @current_editor.on_modified { emit_modified }
+    @current_editor.on_modified do
+      emit_modified
+      update_file_label
+    end
     
     # Обработчик клика для фокуса
     @box.signal_connect('button-press-event') do |widget, event|
@@ -239,17 +274,31 @@ class EditorPane
   public
   
   def update_file_label
-    puts "update_file_label: file=#{@current_file}, is_new=#{@is_new_file}"
+    puts "update_file_label: file=#{@current_file}, is_new=#{@is_new_file}, modified=#{@current_editor.modified?}"
+    
     if @current_file && !@is_new_file
-      # Показываем только имя файла с расширением
-      filename = File.basename(@current_file)
-      @file_label.text = filename
+      # Показываем полный путь с троеточием если не влезает
+      display_path = truncate_path(@current_file, 50)
+      
+      # Добавляем индикатор модификации
+      if @current_editor.modified?
+        display_path += " *"
+      end
+      
+      @file_label.text = display_path
       @file_label.set_tooltip_text(@current_file)
-      puts "Setting label to: #{filename}"
+      puts "Setting label to: #{display_path}"
     else
-      @file_label.text = "No file opened"
+      label_text = @is_new_file ? "Untitled" : "No file opened"
+      
+      # Добавляем индикатор модификации для новых файлов
+      if @is_new_file && @current_editor.modified?
+        label_text += " *"
+      end
+      
+      @file_label.text = label_text
       @file_label.set_tooltip_text("")
-      puts "Setting label to: No file opened"
+      puts "Setting label to: #{label_text}"
     end
     
     # Принудительно обновляем виджет
@@ -276,14 +325,39 @@ class EditorPane
     @original_temp_file = "/tmp/untitled_#{Time.now.to_i}.txt"
     File.write(@original_temp_file, "")
     
-    # Настраиваем сохранение для нового файла
-    @current_editor.on_save_request { request_save_as }
+    # Настраиваем обработку сохранения для нового файла
+    @current_editor.on_save_request { handle_save_request }
+  end
+
+  def handle_save_request
+    if @is_new_file
+      request_save_as
+    else
+      request_save
+    end
+  end
+
+  def request_save
+    return unless @current_file
+    
+    begin
+      content = @current_editor.get_content
+      File.write(@current_file, content)
+      @current_editor.reset_modified
+      update_file_label
+      @on_file_saved_callback.call(@current_file) if @on_file_saved_callback
+      puts "File saved: #{@current_file}"
+    rescue => e
+      puts "Error saving file: #{e.message}"
+    end
   end
 
   def request_save_as
     @on_save_callback.call(self) if @on_save_callback
   end
 
+  public
+  
   def mark_as_saved(file_path)
     @current_file = file_path
     @is_new_file = false
@@ -293,6 +367,9 @@ class EditorPane
       File.delete(@original_temp_file)
       @original_temp_file = nil
     end
+    
+    # Настраиваем обработку сохранения для существующего файла
+    @current_editor.on_save_request { handle_save_request }
     
     # Обновляем отображение
     update_file_label
@@ -334,5 +411,17 @@ class EditorPane
     end
 
     @buttons_box.pack_start(button, expand: false, fill: false, padding: 0)
+  end
+
+  private
+
+  def truncate_path(path, max_length)
+    return path if path.length <= max_length
+    
+    # Оставляем начало и конец пути, добавляем ... посередине
+    start_length = max_length / 2 - 2
+    end_length = max_length - start_length - 3
+    
+    path[0...start_length] + "..." + path[-end_length..-1]
   end
 end 

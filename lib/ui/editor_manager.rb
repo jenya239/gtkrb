@@ -3,12 +3,14 @@ require_relative 'editor_pane'
 require_relative 'split_container'
 
 class EditorManager
-  def initialize
+  def initialize(container)
+    @container = container
     @panes = []
     @active_pane = nil
-    @container = SplitContainer.new
+    @grid_mode = false
     @on_modified_callbacks = []
     @on_file_saved_callback = nil
+    
     setup_initial_pane
   end
 
@@ -26,15 +28,29 @@ class EditorManager
   end
 
   def split_horizontal
-    new_pane = create_pane
-    @container.split_horizontal(@active_pane, new_pane)
-    @active_pane = new_pane
+    if @grid_mode
+      exit_grid_mode
+    end
+    
+    if @active_pane
+      new_pane = create_pane
+      @container.split_horizontal(@active_pane, new_pane)
+      @active_pane = new_pane
+      @active_pane.set_focus
+    end
   end
 
   def split_vertical
-    new_pane = create_pane
-    @container.split_vertical(@active_pane, new_pane)
-    @active_pane = new_pane
+    if @grid_mode
+      exit_grid_mode
+    end
+    
+    if @active_pane
+      new_pane = create_pane
+      @container.split_vertical(@active_pane, new_pane)
+      @active_pane = new_pane
+      @active_pane.set_focus
+    end
   end
 
   def close_active_pane
@@ -61,11 +77,49 @@ class EditorManager
     @active_pane ? @active_pane.get_current_file : nil
   end
 
+  def load_multiple_files(file_paths)
+    return if file_paths.empty?
+    
+    # Очищаем существующие панели и контейнер
+    @panes.clear
+    @container.set_root_container(Gtk::Box.new(:vertical, 0))
+    
+    # Создаем grid-сетку
+    create_grid_from_files(file_paths)
+    
+    # Устанавливаем первую панель как активную
+    @active_pane = @panes.first
+    @active_pane.set_focus if @active_pane
+  end
+
+  def load_directory(directory_path)
+    return unless Dir.exist?(directory_path)
+    
+    # Получаем все файлы из директории
+    files = Dir.glob(File.join(directory_path, "**/*")).select { |f| File.file?(f) }
+    load_multiple_files(files)
+  end
+
+  def load_directories(directory_paths)
+    all_files = []
+    directory_paths.each do |dir|
+      next unless Dir.exist?(dir)
+      files = Dir.glob(File.join(dir, "**/*")).select { |f| File.file?(f) }
+      all_files.concat(files)
+    end
+    load_multiple_files(all_files)
+  end
+
+  def grid_mode?
+    @grid_mode || false
+  end
+
   private
 
   def setup_initial_pane
     @active_pane = create_pane
     @container.set_root(@active_pane)
+    @grid_mode = false
   end
 
   def create_pane
@@ -189,5 +243,154 @@ class EditorManager
 
   def emit_modified
     @on_modified_callbacks.each(&:call)
+  end
+
+  def create_grid_from_files(file_paths)
+    return if file_paths.empty?
+    
+    # Вычисляем размеры grid
+    total_files = file_paths.length
+    cols = Math.sqrt(total_files).ceil
+    rows = (total_files.to_f / cols).ceil
+    
+    puts "Creating grid: #{rows}x#{cols} for #{total_files} files"
+    
+    # Создаем панели для каждого файла
+    file_paths.each_with_index do |file_path, index|
+      pane = create_pane
+      pane.load_file(file_path)
+    end
+    
+    # Создаем grid-сетку
+    create_grid_layout(rows, cols)
+  end
+
+  def create_grid_layout(rows, cols)
+    return if @panes.empty?
+    
+    # Создаем строки
+    row_containers = []
+    rows.times do |row|
+      row_start = row * cols
+      row_panes = @panes[row_start, cols] || []
+      next if row_panes.empty?
+      
+      if row_panes.size == 1
+        # Одна панель в строке
+        row_containers << row_panes.first.widget
+      else
+        # Создаем горизонтальную цепочку Paned для строки
+        row_widget = create_horizontal_chain(row_panes)
+        row_containers << row_widget
+      end
+    end
+    
+    # Создаем вертикальную цепочку для строк
+    main_widget = if row_containers.size == 1
+      row_containers.first
+    else
+      create_vertical_chain(row_containers)
+    end
+    
+    # Удаляем виджеты из текущих родителей
+    @panes.each do |pane|
+      if pane.widget.parent
+        pane.widget.parent.remove(pane.widget)
+      end
+    end
+    
+    # Создаем контейнер
+    main_container = Gtk::Box.new(:vertical, 0)
+    main_container.pack_start(main_widget, expand: true, fill: true, padding: 0)
+    
+    # Устанавливаем новый контейнер как корневой
+    @container.set_root_container(main_container)
+    
+    # Помечаем что мы в grid режиме
+    @grid_mode = true
+  end
+  
+  def create_horizontal_chain(panes)
+    return panes.first.widget if panes.size == 1
+    
+    # Создаем цепочку горизонтальных Paned
+    root_paned = Gtk::Paned.new(:horizontal)
+    root_paned.pack1(panes.first.widget, expand: true, shrink: false)
+    
+    current_paned = root_paned
+    panes[1..-1].each_with_index do |pane, index|
+      if index == panes.size - 2
+        # Последняя панель
+        current_paned.pack2(pane.widget, expand: true, shrink: false)
+      else
+        # Промежуточная панель
+        new_paned = Gtk::Paned.new(:horizontal)
+        new_paned.pack1(pane.widget, expand: true, shrink: false)
+        current_paned.pack2(new_paned, expand: true, shrink: false)
+        current_paned = new_paned
+      end
+    end
+    
+    # Устанавливаем равномерные позиции
+    set_equal_positions(root_paned, panes.size)
+    
+    root_paned
+  end
+  
+  def create_vertical_chain(widgets)
+    return widgets.first if widgets.size == 1
+    
+    # Создаем цепочку вертикальных Paned
+    root_paned = Gtk::Paned.new(:vertical)
+    root_paned.pack1(widgets.first, expand: true, shrink: false)
+    
+    current_paned = root_paned
+    widgets[1..-1].each_with_index do |widget, index|
+      if index == widgets.size - 2
+        # Последний виджет
+        current_paned.pack2(widget, expand: true, shrink: false)
+      else
+        # Промежуточный виджет
+        new_paned = Gtk::Paned.new(:vertical)
+        new_paned.pack1(widget, expand: true, shrink: false)
+        current_paned.pack2(new_paned, expand: true, shrink: false)
+        current_paned = new_paned
+      end
+    end
+    
+    # Устанавливаем равномерные позиции
+    set_equal_positions(root_paned, widgets.size)
+    
+    root_paned
+  end
+  
+  def set_equal_positions(paned, total_items)
+    # Устанавливаем позицию после показа окна
+    GLib::Timeout.add(50) do
+      if paned.allocated_width > 0 && paned.allocated_height > 0
+        if paned.orientation == :horizontal
+          position = paned.allocated_width / total_items
+        else
+          position = paned.allocated_height / total_items
+        end
+        paned.position = position
+      end
+      false # не повторять
+    end
+  end
+  
+  def exit_grid_mode
+    return unless @grid_mode
+    
+    # Возвращаемся к обычному режиму с одной активной панелью
+    if @active_pane
+      @container.set_root(@active_pane)
+      @panes = [@active_pane]
+    else
+      # Создаем новую панель если нет активной
+      setup_initial_pane
+    end
+    
+    @grid_mode = false
   end
 end 

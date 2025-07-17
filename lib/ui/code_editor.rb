@@ -56,6 +56,11 @@ class CodeEditor
     @modified
   end
 
+  def reset_modified
+    @modified = false
+    emit_modified
+  end
+
   def file_path
     @file_path
   end

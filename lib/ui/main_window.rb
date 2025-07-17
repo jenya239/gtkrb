@@ -1,12 +1,14 @@
 require 'gtk3'
 require_relative 'file_explorer'
 require_relative 'editor_manager'
+require_relative 'split_container'
 
 class MainWindow
-  def initialize(application)
+  def initialize(application = nil)
     @win = Gtk::Window.new
     @file_explorer = FileExplorer.new
-    @editor_manager = EditorManager.new
+    @split_container = SplitContainer.new
+    @editor_manager = EditorManager.new(@split_container)
     setup_window
     setup_layout
     connect_signals
@@ -15,6 +17,18 @@ class MainWindow
 
   def present
     @win.show_all
+  end
+
+  def editor_manager
+    @editor_manager
+  end
+
+  def show_all
+    @win.show_all
+  end
+
+  def signal_connect(signal, &block)
+    @win.signal_connect(signal, &block)
   end
 
   private
@@ -28,7 +42,7 @@ class MainWindow
   def setup_layout
     paned = Gtk::Paned.new(:horizontal)
     paned.pack1(@file_explorer.widget, resize: false, shrink: true)
-    paned.pack2(@editor_manager.widget, resize: true, shrink: true)
+    paned.pack2(@split_container.widget, resize: true, shrink: true)
     paned.set_position(300)
     @win.add(paned)
   end
@@ -42,6 +56,7 @@ class MainWindow
     # Обновляем панель файлов при сохранении
     @editor_manager.on_file_saved do |file_path|
       @file_explorer.refresh
+      update_title
     end
     
     # Горячие клавиши

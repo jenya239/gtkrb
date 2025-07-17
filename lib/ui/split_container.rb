@@ -12,9 +12,28 @@ class SplitContainer
   end
 
   def set_root(pane)
+    # Очищаем существующий контент
+    @main_widget.children.each { |child| @main_widget.remove(child) }
+    
+    # Сбрасываем отслеживание панелей
+    @panes.clear
+    
+    # Устанавливаем новую root панель
     @root = pane
     @panes[pane] = { widget: pane.widget, parent: nil }
     @main_widget.pack_start(pane.widget, expand: true, fill: true, padding: 0)
+  end
+
+  def set_root_container(container)
+    # Очищаем основной виджет
+    @main_widget.children.each { |child| @main_widget.remove(child) }
+    
+    # Очищаем отслеживание панелей для grid режима
+    @panes.clear
+    @root = nil
+    
+    # Добавляем новый контейнер
+    @main_widget.pack_start(container, expand: true, fill: true, padding: 0)
   end
 
   def split_horizontal(existing_pane, new_pane)
