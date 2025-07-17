@@ -8,7 +8,7 @@ class MainWindow
     @win = Gtk::Window.new
     @file_explorer = FileExplorer.new
     @split_container = SplitContainer.new
-    @editor_manager = EditorManager.new(@split_container)
+    @editor_manager = EditorManager.new(@split_container, @file_explorer)
     setup_window
     setup_layout
     connect_signals

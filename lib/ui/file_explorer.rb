@@ -52,6 +52,10 @@ class FileExplorer
     @label.text = truncate_path(@tree_widget.current_path)
   end
   
+  def current_path
+    @tree_widget.current_path
+  end
+  
   private
   
   def setup_signals

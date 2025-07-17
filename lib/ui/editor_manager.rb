@@ -3,8 +3,9 @@ require_relative 'editor_pane'
 require_relative 'split_container'
 
 class EditorManager
-  def initialize(container)
+  def initialize(container, file_explorer = nil)
     @container = container
+    @file_explorer = file_explorer
     @panes = []
     @active_pane = nil
     @grid_mode = false
@@ -77,6 +78,22 @@ class EditorManager
     @active_pane ? @active_pane.get_current_file : nil
   end
 
+  def get_working_directory_for_terminal
+    # Сначала пытаемся получить каталог из текущего файла
+    if @active_pane
+      working_dir = @active_pane.get_working_directory
+      return working_dir if working_dir != Dir.pwd
+    end
+    
+    # Если не получилось, берем каталог из дерева файлов
+    if @file_explorer && @file_explorer.respond_to?(:current_path)
+      return @file_explorer.current_path
+    end
+    
+    # Fallback на текущий каталог
+    Dir.pwd
+  end
+
   def load_multiple_files(file_paths)
     return if file_paths.empty?
     
@@ -145,6 +162,7 @@ class EditorManager
     pane.on_save { |p| show_save_dialog(p) }
     pane.on_file_saved { |file_path| @on_file_saved_callback.call(file_path) if @on_file_saved_callback }
     pane.on_history { |p| show_file_history(p) }
+    pane.on_terminal { |p| show_terminal(p) }
     
     pane
   end
@@ -207,8 +225,60 @@ class EditorManager
     history = pane.get_file_history
     return if history.empty?
     
-    # Создаем ультракомпактный выпадающий список
-    create_compact_history_dropdown(pane, history)
+    # Создаем компактный выпадающий список
+    popup = create_compact_history_dropdown(pane, history)
+    popup.show_all
+  end
+
+  def show_terminal(pane)
+    working_dir = get_working_directory_for_terminal
+    puts "Opening terminal in: #{working_dir}"
+    
+    # Создаем новое окно терминала
+    terminal_window = Gtk::Window.new
+    terminal_window.set_title("Terminal - #{working_dir}")
+    terminal_window.set_default_size(800, 600)
+    terminal_window.set_position(:center)
+    
+    # Создаем VTE терминал
+    terminal = Vte::Terminal.new
+    terminal.set_size(80, 24)
+    terminal.set_scrollback_lines(1000)
+    
+    # Запускаем shell в нужном каталоге (используем новый API)
+    begin
+      terminal.spawn_async(
+        :default,
+        working_dir,
+        [ENV['SHELL'] || '/bin/bash'],
+        nil,
+        :default,
+        nil,
+        -1,
+        nil
+      ) do |terminal, pid, error|
+        if error
+          puts "Error spawning terminal: #{error.message}"
+        else
+          puts "Terminal spawned with PID: #{pid}"
+        end
+      end
+    rescue => e
+      puts "Error creating terminal: #{e.message}"
+      # Fallback на простой запуск если не получилось
+      terminal.feed_child("cd #{working_dir}\n")
+    end
+    
+    # Добавляем скроллбар
+    scrolled = Gtk::ScrolledWindow.new
+    scrolled.set_policy(:never, :automatic)
+    scrolled.add(terminal)
+    
+    terminal_window.add(scrolled)
+    terminal_window.show_all
+    
+    # Фокус на терминал
+    terminal.grab_focus
   end
 
   def create_compact_history_dropdown(pane, history)

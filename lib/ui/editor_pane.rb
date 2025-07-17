@@ -1,4 +1,5 @@
 require 'gtk3'
+require 'vte3'
 require_relative 'code_editor'
 
 class EditorPane
@@ -16,6 +17,7 @@ class EditorPane
     @on_split_h_callback = nil
     @on_split_v_callback = nil
     @on_new_file_callback = nil
+    @on_terminal_callback = nil
     @is_new_file = true
     @original_temp_file = nil
     @on_file_saved_callback = nil
@@ -106,6 +108,18 @@ class EditorPane
 
   def on_history(&block)
     @on_history_callback = block
+  end
+
+  def on_terminal(&block)
+    @on_terminal_callback = block
+  end
+
+  def get_working_directory
+    if @current_file && File.exist?(@current_file)
+      File.dirname(@current_file)
+    else
+      Dir.pwd
+    end
   end
 
   def get_file_history
@@ -269,6 +283,7 @@ class EditorPane
     create_button("❙", :split_h)      # Горизонтальное разделение
     create_button("═", :split_v)      # Вертикальное разделение
     create_button("⏷", :history)      # История файлов
+    create_button("⌘", :terminal)     # Терминал
     create_button("✗", :close)        # Закрыть
     
     @buttons_box.pack_start(@test_button, expand: false, fill: false, padding: 0)
@@ -435,6 +450,8 @@ class EditorPane
         @on_split_v_callback.call(self) if @on_split_v_callback
       when :history
         @on_history_callback.call(self) if @on_history_callback
+      when :terminal
+        @on_terminal_callback.call(self) if @on_terminal_callback
       when :close
         @on_close_callback.call(self) if @on_close_callback
       end
