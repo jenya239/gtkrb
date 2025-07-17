@@ -144,6 +144,7 @@ class EditorManager
     pane.on_new_file { |p| create_new_file(p) }
     pane.on_save { |p| show_save_dialog(p) }
     pane.on_file_saved { |file_path| @on_file_saved_callback.call(file_path) if @on_file_saved_callback }
+    pane.on_history { |p| show_file_history(p) }
     
     pane
   end
@@ -200,6 +201,198 @@ class EditorManager
     end
     
     dialog.destroy
+  end
+
+  def show_file_history(pane)
+    history = pane.get_file_history
+    return if history.empty?
+    
+    # Создаем ультракомпактный выпадающий список
+    create_compact_history_dropdown(pane, history)
+  end
+
+  def create_compact_history_dropdown(pane, history)
+    # Создаем всплывающее окно
+    popup = Gtk::Window.new(:popup)
+    popup.set_type_hint(:dropdown_menu)
+    popup.set_decorated(false)
+    popup.set_resizable(false)
+    popup.set_skip_taskbar_hint(true)
+    popup.set_skip_pager_hint(true)
+    popup.set_modal(true)
+    
+    # Контейнер для списка без отступов
+    list_container = Gtk::Box.new(:vertical, 0)
+    
+    # Максимальная высота
+    max_height = [history.length * 16, 160].min
+    
+    history.each_with_index do |file_path, index|
+      # Создаем компактную строку
+      row = create_compact_history_row(file_path, index + 1)
+      
+      # Оборачиваем в EventBox для кликабельности
+      event_box = Gtk::EventBox.new
+      event_box.add(row)
+      
+      # Обработчик клика
+      event_box.signal_connect('button-press-event') do |widget, event|
+        if event.button == 1 # Левый клик
+          pane.load_file(file_path)
+          popup.destroy
+          true
+        else
+          false
+        end
+      end
+      
+      # Эффект hover
+      event_box.signal_connect('enter-notify-event') do
+        row.override_background_color(:normal, Gdk::RGBA::new(0.2, 0.4, 0.8, 1.0))
+      end
+      
+      event_box.signal_connect('leave-notify-event') do
+        row.override_background_color(:normal, Gdk::RGBA::new(0.15, 0.15, 0.15, 1.0))
+      end
+      
+      list_container.pack_start(event_box, expand: false, fill: false, padding: 0)
+    end
+    
+    # Scrolled window если нужно
+    if history.length > 10
+      scrolled = Gtk::ScrolledWindow.new
+      scrolled.add(list_container)
+      scrolled.set_policy(:never, :automatic)
+      scrolled.set_size_request(280, max_height)
+      popup.add(scrolled)
+    else
+      popup.add(list_container)
+      popup.set_size_request(280, history.length * 16)
+    end
+    
+    # Позиционируем относительно кнопки истории
+    position_popup_near_history_button(popup, pane)
+    
+    # Закрытие по Escape
+    popup.signal_connect('key-press-event') do |widget, event|
+      if event.keyval == Gdk::Keyval::KEY_Escape
+        popup.destroy
+        true
+      else
+        false
+      end
+    end
+    
+    # Закрытие при потере фокуса
+    popup.signal_connect('focus-out-event') do |widget, event|
+      popup.destroy
+      false
+    end
+    
+    # Закрытие при клике вне окна
+    popup.signal_connect('button-press-event') do |widget, event|
+      # Проверяем, что клик был не по содержимому
+      allocation = popup.allocation
+      if event.x < 0 || event.x > allocation.width || event.y < 0 || event.y > allocation.height
+        popup.destroy
+      end
+      false
+    end
+    
+    popup.show_all
+    popup.grab_focus
+    
+    # Дополнительная защита - закрытие через таймер если что-то пошло не так
+    GLib::Timeout.add(10000) do # 10 секунд
+      if popup && !popup.destroyed?
+        popup.destroy
+      end
+      false
+    end
+  end
+
+  def create_compact_history_row(file_path, number)
+    row = Gtk::Box.new(:horizontal, 1)
+    row.set_size_request(-1, 16)
+    
+    # Темный фон
+    row.override_background_color(:normal, Gdk::RGBA::new(0.15, 0.15, 0.15, 1.0))
+    
+    # Номер (очень компактный)
+    number_label = Gtk::Label.new("#{number}")
+    number_label.set_size_request(14, -1)
+    number_label.override_color(:normal, Gdk::RGBA::new(0.5, 0.5, 0.5, 1.0))
+    number_label.override_font(Pango::FontDescription.new('Sans 6'))
+    
+    # Иконка
+    icon_label = Gtk::Label.new("📄")
+    icon_label.set_size_request(10, -1)
+    icon_label.override_font(Pango::FontDescription.new('Sans 6'))
+    
+    # Имя файла (компактное)
+    file_name = File.basename(file_path)
+    name_label = Gtk::Label.new(file_name)
+    name_label.set_xalign(0.0)
+    name_label.override_font(Pango::FontDescription.new('Sans 6'))
+    name_label.override_color(:normal, Gdk::RGBA::new(0.9, 0.9, 0.9, 1.0))
+    name_label.set_ellipsize(:middle)
+    
+    # Путь (очень компактный)
+    dir_path = File.dirname(file_path)
+    if dir_path != "." && dir_path != "/"
+      # Сокращаем путь еще больше
+      short_path = truncate_path(dir_path)
+      path_label = Gtk::Label.new(" (#{short_path})")
+      path_label.override_font(Pango::FontDescription.new('Sans 5'))
+      path_label.override_color(:normal, Gdk::RGBA::new(0.6, 0.6, 0.6, 1.0))
+      path_label.set_ellipsize(:middle)
+    else
+      path_label = Gtk::Label.new("")
+    end
+    
+    row.pack_start(number_label, expand: false, fill: false, padding: 0)
+    row.pack_start(icon_label, expand: false, fill: false, padding: 0)
+    row.pack_start(name_label, expand: true, fill: true, padding: 0)
+    row.pack_start(path_label, expand: false, fill: false, padding: 0)
+    
+    row
+  end
+
+  def position_popup_near_history_button(popup, pane)
+    # Получаем позицию кнопки истории
+    buttons_box = pane.instance_variable_get(:@buttons_box)
+    history_button = buttons_box.children.find { |child| 
+      child.instance_variable_get(:@action) == :history rescue false
+    }
+    
+    if history_button && history_button.window
+      # Получаем координаты кнопки в экранных координатах
+      button_x, button_y = history_button.window.get_root_coords(0, 0)
+      button_width = history_button.allocation.width
+      button_height = history_button.allocation.height
+      
+      # Позиционируем под кнопкой
+      popup_x = button_x + button_width - 280  # Выравниваем по правому краю
+      popup_y = button_y + button_height
+      
+      # Проверяем границы экрана
+      screen = Gdk::Screen.default
+      if popup_x < 0
+        popup_x = button_x
+      elsif popup_x + 280 > screen.width
+        popup_x = screen.width - 280
+      end
+      
+      if popup_y + 160 > screen.height
+        popup_y = button_y - 160  # Показываем над кнопкой
+      end
+      
+      popup.move(popup_x, popup_y)
+    else
+      # Fallback - в центре экрана
+      screen = Gdk::Screen.default
+      popup.move(screen.width / 2 - 140, screen.height / 2 - 80)
+    end
   end
 
   def swap_with_active(clicked_pane)
@@ -392,5 +585,15 @@ class EditorManager
     end
     
     @grid_mode = false
+  end
+
+  def truncate_path(path, max_length = 25)
+    return path if path.length <= max_length
+    
+    # Обрезаем посередине с многоточием
+    left_part = path[0, (max_length - 3) / 2]
+    right_part = path[-(max_length - 3 - left_part.length)..-1]
+    
+    "#{left_part}...#{right_part}"
   end
 end 

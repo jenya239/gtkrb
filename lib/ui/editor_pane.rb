@@ -19,6 +19,11 @@ class EditorPane
     @is_new_file = true
     @original_temp_file = nil
     @on_file_saved_callback = nil
+    @on_history_callback = nil
+    
+    # История файлов для этого редактора
+    @file_history = []
+    @max_history_size = 20
     
     setup_ui
     setup_new_file
@@ -32,6 +37,9 @@ class EditorPane
     @current_file = file_path
     @is_new_file = false
     @current_editor.load_file(file_path)
+    
+    # Добавляем файл в историю
+    add_to_history(file_path)
     
     # Настраиваем обработку сохранения для существующего файла
     @current_editor.on_save_request { handle_save_request }
@@ -94,6 +102,31 @@ class EditorPane
 
   def on_file_saved(&block)
     @on_file_saved_callback = block
+  end
+
+  def on_history(&block)
+    @on_history_callback = block
+  end
+
+  def get_file_history
+    @file_history.dup
+  end
+
+  def add_to_history(file_path)
+    return unless file_path && File.exist?(file_path)
+    
+    # Удаляем из истории если уже есть
+    @file_history.delete(file_path)
+    
+    # Добавляем в начало
+    @file_history.unshift(file_path)
+    
+    # Ограничиваем размер истории
+    @file_history = @file_history.first(@max_history_size)
+  end
+
+  def clear_history
+    @file_history.clear
   end
 
   def set_focus
@@ -235,6 +268,7 @@ class EditorPane
     create_button("⊞", :new_file)     # Новый файл
     create_button("❙", :split_h)      # Горизонтальное разделение
     create_button("═", :split_v)      # Вертикальное разделение
+    create_button("⏷", :history)      # История файлов
     create_button("✗", :close)        # Закрыть
     
     @buttons_box.pack_start(@test_button, expand: false, fill: false, padding: 0)
@@ -387,6 +421,10 @@ class EditorPane
     button = Gtk::EventBox.new
     button.add(button_label)
     button.set_size_request(12, 12)
+    
+    # Сохраняем action для поиска
+    button.instance_variable_set(:@action, action)
+    
     button.signal_connect('button-press-event') do |widget, event|
       case action
       when :new_file
@@ -395,6 +433,8 @@ class EditorPane
         @on_split_h_callback.call(self) if @on_split_h_callback
       when :split_v
         @on_split_v_callback.call(self) if @on_split_v_callback
+      when :history
+        @on_history_callback.call(self) if @on_history_callback
       when :close
         @on_close_callback.call(self) if @on_close_callback
       end

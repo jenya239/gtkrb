@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GTKRB Editor
+Comment=Multi-panel GTK Ruby editor
+Exec=/home/jenya/.rbenv/shims/ruby /home/jenya/workspaces/cursor/gtkrb/editor.rb
+Icon=text-editor
+Terminal=false
+Categories=Development;TextEditor;
+Keywords=editor;text;code;ruby;gtk; 

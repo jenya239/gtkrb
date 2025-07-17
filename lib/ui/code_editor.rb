@@ -207,6 +207,9 @@ class CodeEditor
     @view.set_auto_indent(true)
     @view.set_indent_width(2)
     
+    # Word wrap
+    @view.set_wrap_mode(:word_char)
+    
     # Обработка изменений
     @buffer.signal_connect('changed') { mark_modified }
     
@@ -215,10 +218,30 @@ class CodeEditor
       if event.state.control_mask? && event.keyval == Gdk::Keyval::KEY_s
         request_save
         true
+      elsif event.state.control_mask? && event.keyval == Gdk::Keyval::KEY_w
+        # Ctrl+W - переключить word wrap
+        toggle_word_wrap
+        true
       else
         false
       end
     end
+  end
+
+  def toggle_word_wrap
+    current_mode = @view.wrap_mode
+    new_mode = current_mode == :none ? :word_char : :none
+    @view.set_wrap_mode(new_mode)
+    puts "Word wrap: #{new_mode == :none ? 'disabled' : 'enabled'}"
+  end
+
+  def set_word_wrap(enabled)
+    mode = enabled ? :word_char : :none
+    @view.set_wrap_mode(mode)
+  end
+
+  def word_wrap_enabled?
+    @view.wrap_mode != :none
   end
 
   def emit_modified
