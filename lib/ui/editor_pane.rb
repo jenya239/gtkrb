@@ -23,12 +23,20 @@ class EditorPane
     @on_file_saved_callback = nil
     @on_history_callback = nil
     
+    # Состояние терминала
+    @terminal_mode = false
+    @terminal = nil
+    @terminal_widget = nil
+    
     # История файлов для этого редактора
     @file_history = []
     @max_history_size = 20
     
     setup_ui
     setup_new_file
+    
+    # Убеждаемся что терминал скрыт при инициализации
+    ensure_correct_display_state
   end
 
   def widget
@@ -119,6 +127,105 @@ class EditorPane
       File.dirname(@current_file)
     else
       Dir.pwd
+    end
+  end
+
+  def show_terminal(working_dir)
+    return if @terminal_mode
+    
+    # Создаем терминал если его нет
+    unless @terminal
+      @terminal = Vte::Terminal.new
+      @terminal.set_size(80, 24)
+      @terminal.set_scrollback_lines(1000)
+      
+      # Добавляем скроллбар для терминала
+      @terminal_widget = Gtk::ScrolledWindow.new
+      @terminal_widget.set_policy(:never, :automatic)
+      @terminal_widget.add(@terminal)
+      @terminal_widget.set_hexpand(true)
+      @terminal_widget.set_vexpand(true)
+      
+      # Добавляем терминал в контейнер, но не показываем пока
+      @box.pack_start(@terminal_widget, expand: true, fill: true, padding: 0)
+    end
+    
+    # Скрываем редактор
+    @current_editor.widget.hide
+    
+    # Показываем терминал
+    @terminal_widget.show_all
+    
+    # Запускаем shell в нужном каталоге
+    begin
+      @terminal.spawn_sync(
+        0,
+        working_dir,
+        [ENV['SHELL'] || '/bin/bash'],
+        nil,
+        0
+      )
+      puts "Terminal spawned successfully in #{working_dir}"
+    rescue => e
+      puts "Failed to spawn terminal: #{e.message}"
+      # Fallback на простой запуск
+      @terminal.feed_child("cd #{working_dir}\n")
+    end
+    
+    @terminal_mode = true
+    @terminal.grab_focus
+    
+    # Обновляем заголовок
+    update_terminal_label(working_dir)
+  end
+
+  def hide_terminal
+    return unless @terminal_mode
+    
+    # Скрываем терминал (но не удаляем из контейнера)
+    @terminal_widget.hide if @terminal_widget
+    
+    # Показываем редактор
+    @current_editor.widget.show
+    
+    @terminal_mode = false
+    
+    # Обновляем заголовок
+    update_file_label
+  end
+
+  def terminal_mode?
+    @terminal_mode
+  end
+
+  def toggle_terminal
+    if @terminal_mode
+      hide_terminal
+    else
+      working_dir = get_working_directory
+      show_terminal(working_dir)
+    end
+    
+    # Убеждаемся что состояние правильное
+    ensure_correct_display_state
+    
+    # Обновляем иконку кнопки
+    update_terminal_button_icon
+  end
+
+  def update_terminal_button_icon
+    # Находим кнопку терминала и обновляем иконку
+    terminal_button = @buttons_box.children.find { |child| 
+      child.instance_variable_get(:@action) == :terminal rescue false
+    }
+    
+    if terminal_button
+      button_label = terminal_button.children.first
+      if @terminal_mode
+        button_label.text = "📝"  # Иконка для возврата к редактору
+      else
+        button_label.text = "⌘"   # Иконка для терминала
+      end
     end
   end
 
@@ -296,6 +403,9 @@ class EditorPane
     @box.pack_start(@file_info_box, expand: false, fill: true, padding: 0)
     @box.pack_start(@current_editor.widget, expand: true, fill: true, padding: 0)
     
+    # Важно: показываем редактор при создании панели
+    @current_editor.widget.show_all
+    
     # Подключаем обработчики
     @current_editor.on_modified do
       emit_modified
@@ -353,6 +463,13 @@ class EditorPane
     # Принудительно обновляем виджет
     @file_label.queue_draw
     @file_info_box.queue_draw
+  end
+
+  def update_terminal_label(working_dir)
+    if @terminal_mode
+      @file_label.text = "Terminal - #{File.basename(working_dir)}"
+      @file_label.set_tooltip_text("Terminal - #{working_dir}")
+    end
   end
 
   private
@@ -451,7 +568,7 @@ class EditorPane
       when :history
         @on_history_callback.call(self) if @on_history_callback
       when :terminal
-        @on_terminal_callback.call(self) if @on_terminal_callback
+        toggle_terminal
       when :close
         @on_close_callback.call(self) if @on_close_callback
       end
@@ -480,5 +597,18 @@ class EditorPane
     end_length = max_length - start_length - 3
     
     path[0...start_length] + "..." + path[-end_length..-1]
+  end
+
+  def ensure_correct_display_state
+    # Убеждаемся что отображается правильный компонент
+    if @terminal_mode
+      # Должен отображаться терминал
+      @current_editor.widget.hide
+      @terminal_widget.show_all if @terminal_widget
+    else  
+      # Должен отображаться редактор
+      @terminal_widget.hide if @terminal_widget
+      @current_editor.widget.show_all
+    end
   end
 end 
