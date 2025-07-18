@@ -76,6 +76,37 @@ GLib::Idle.add do
 end
 ```
 
+#### **Проблема 5**: Segfault (core dumped) в выпадающем списке истории
+
+**Проблема**: Множественные signal handlers, модальные popup окна и таймеры вызывали segmentation fault
+
+**Решение**: Упрощение логики выпадающего списка
+```ruby
+# Безопасная функция уничтожения
+safe_destroy = proc do
+  unless popup_destroyed
+    popup_destroyed = true
+    popup.destroy
+  end
+end
+
+# Только необходимые обработчики
+event_box.signal_connect('button-press-event') do |widget, event|
+  if event.button == 1 && !popup_destroyed
+    pane.load_file(file_path)
+    safe_destroy.call
+  end
+  true
+end
+```
+
+**Изменения**:
+- Удалена модальность popup окна
+- Убраны множественные signal handlers
+- Удален GLib::Timeout.add 
+- Добавлена защита от двойного destroy
+- Упрощено позиционирование с обработкой ошибок
+
 ### 6. **Использование**
 
 1. **Откройте файл** в редакторе
