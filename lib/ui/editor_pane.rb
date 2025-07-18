@@ -250,6 +250,19 @@ class EditorPane
     @file_history.clear
   end
 
+  def ensure_correct_display_state
+    # Убеждаемся что отображается правильный компонент
+    if @terminal_mode
+      # Должен отображаться терминал
+      @current_editor.widget.hide
+      @terminal_widget.show_all if @terminal_widget
+    else  
+      # Должен отображаться редактор
+      @terminal_widget.hide if @terminal_widget
+      @current_editor.widget.show_all
+    end
+  end
+
   def set_focus
     @current_editor.widget.grab_focus
   end
@@ -597,18 +610,5 @@ class EditorPane
     end_length = max_length - start_length - 3
     
     path[0...start_length] + "..." + path[-end_length..-1]
-  end
-
-  def ensure_correct_display_state
-    # Убеждаемся что отображается правильный компонент
-    if @terminal_mode
-      # Должен отображаться терминал
-      @current_editor.widget.hide
-      @terminal_widget.show_all if @terminal_widget
-    else  
-      # Должен отображаться редактор
-      @terminal_widget.hide if @terminal_widget
-      @current_editor.widget.show_all
-    end
   end
 end 
