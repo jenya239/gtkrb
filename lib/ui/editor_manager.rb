@@ -10,6 +10,7 @@ class EditorManager
     @grid_mode = false
     @on_modified_callbacks = []
     @on_file_saved_callback = nil
+    @current_popup = nil
     
     setup_initial_pane
   end
@@ -207,11 +208,19 @@ class EditorManager
   end
 
   def show_file_history(pane)
+    # Если попап уже открыт, закрываем его
+    if @current_popup
+      @current_popup.destroy
+      @current_popup = nil
+      return
+    end
+    
     history = pane.get_file_history
     return if history.empty?
     
     # Создаем компактный выпадающий список
     popup = create_compact_history_dropdown(pane, history)
+    @current_popup = popup
     popup.show_all
   end
 
@@ -235,6 +244,7 @@ class EditorManager
     safe_destroy = proc do
       unless popup_destroyed
         popup_destroyed = true
+        @current_popup = nil
         popup.destroy
       end
     end
@@ -322,6 +332,12 @@ class EditorManager
       else
         false
       end
+    end
+    
+    # Закрытие по потере фокуса
+    popup.signal_connect('focus-out-event') do |widget, event|
+      safe_destroy.call
+      false
     end
     
     popup
