@@ -58,6 +58,24 @@
 
 **Решение**: Новые панели автоматически вызывают `ensure_correct_display_state()` при создании
 
+#### **Проблема 4**: Одновременное отображение терминала и редактора при разделении панелей
+
+**Проблема**: При разделении панелей `show_all` в SplitContainer показывает все дочерние виджеты, включая скрытые
+
+**Решение**: Добавлена коррекция состояния после `show_all` в `SplitContainer`
+```ruby
+# В split_pane после show_all
+GLib::Idle.add do
+  if existing_pane.respond_to?(:ensure_correct_display_state)
+    existing_pane.ensure_correct_display_state
+  end
+  if new_pane.respond_to?(:ensure_correct_display_state)
+    new_pane.ensure_correct_display_state
+  end
+  false
+end
+```
+
 ### 6. **Использование**
 
 1. **Откройте файл** в редакторе

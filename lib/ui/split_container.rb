@@ -112,6 +112,17 @@ class SplitContainer
     # Показываем все виджеты
     paned.show_all
     
+    # Исправляем состояние отображения панелей после show_all с задержкой
+    GLib::Idle.add do
+      if existing_pane.respond_to?(:ensure_correct_display_state)
+        existing_pane.ensure_correct_display_state
+      end
+      if new_pane.respond_to?(:ensure_correct_display_state)
+        new_pane.ensure_correct_display_state
+      end
+      false
+    end
+    
     # Устанавливаем позицию для деления пополам после отрисовки
     GLib::Idle.add do
       allocation = paned.allocation
