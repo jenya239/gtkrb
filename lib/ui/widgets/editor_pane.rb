@@ -629,8 +629,9 @@ class EditorPane
 
   def update_file_tree_label(path)
     if @file_tree_mode
-      @file_label.text = "File Tree - #{File.basename(path)}"
-      @file_label.set_tooltip_text("File Tree - #{path}")
+      display_path = truncate_path(path, 50)
+      @file_label.text = display_path
+      @file_label.set_tooltip_text(path)
     end
   end
 

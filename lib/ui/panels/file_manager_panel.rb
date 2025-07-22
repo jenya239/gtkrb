@@ -21,7 +21,7 @@ class FileManagerPanel < BasePanel
   end
 
   def get_title
-    "Files: #{File.basename(@current_dir)}"
+    truncate_path(@current_dir, 40)
   end
 
   def focus
@@ -281,5 +281,15 @@ class FileManagerPanel < BasePanel
     else
       super(action)
     end
+  end
+
+  def truncate_path(path, max_length = 40)
+    return path if path.length <= max_length
+    
+    # Сокращаем посередине с многоточием
+    left_part = path[0, (max_length - 3) / 2]
+    right_part = path[-(max_length - 3 - left_part.length)..-1]
+    
+    "#{left_part}...#{right_part}"
   end
 end 

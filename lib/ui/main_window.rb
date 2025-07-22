@@ -126,12 +126,14 @@ class MainWindow
     @editor_manager.convert_pane_to_terminal
   end
   
-  def truncate_path(path)
-    if path.length > 30
-      "...#{path[-27..-1]}"
-    else
-      path
-    end
+  def truncate_path(path, max_length = 30)
+    return path if path.length <= max_length
+    
+    # Сокращаем посередине с многоточием
+    left_part = path[0, (max_length - 3) / 2]
+    right_part = path[-(max_length - 3 - left_part.length)..-1]
+    
+    "#{left_part}...#{right_part}"
   end
 
   def setup_window
