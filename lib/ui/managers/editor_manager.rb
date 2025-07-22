@@ -1,6 +1,8 @@
 require 'gtk3'
-require_relative 'editor_pane'
-require_relative 'split_container'
+require_relative '../widgets/editor_pane'
+require_relative '../containers/split_container'
+require_relative '../widgets/file_tree_panel'
+require_relative 'panel_type_manager'
 
 class EditorManager
   def initialize(container)
@@ -11,6 +13,7 @@ class EditorManager
     @on_modified_callbacks = []
     @on_file_saved_callback = nil
     @current_popup = nil
+    @panel_type_manager = PanelTypeManager.new(@panes)
     
     setup_initial_pane
   end
@@ -20,12 +23,8 @@ class EditorManager
   end
 
   def load_file(file_path)
-    # Открываем файл в активном редакторе
-    if @active_pane
-      @active_pane.load_file(file_path)
-    else
-      create_pane.load_file(file_path)
-    end
+    # Используем ту же эвристику что и для панелей
+    handle_file_selection_from_tree(file_path)
   end
 
   def split_horizontal
@@ -51,6 +50,98 @@ class EditorManager
       @container.split_vertical(@active_pane, new_pane)
       @active_pane = new_pane
       @active_pane.set_focus
+    end
+  end
+  
+  def convert_pane_to_file_tree(path = Dir.pwd)
+    if @active_pane
+      old_type = @panel_type_manager.get_panel_type(@active_pane)
+      @panel_type_manager.clear_active_representative(old_type)
+      
+      # Callback уже установлен в create_pane, просто показываем файловое дерево
+      @active_pane.show_file_tree(path)
+      
+      new_type = @panel_type_manager.get_panel_type(@active_pane)
+      @panel_type_manager.set_active_representative(:file_tree, @active_pane)
+    end
+  end
+  
+  def convert_pane_to_terminal(path = Dir.pwd)
+    if @active_pane
+      # Показываем что было до конвертации
+      old_type = @panel_type_manager.get_panel_type(@active_pane)
+      puts "Converting panel from #{old_type} to terminal"
+      
+      # Очищаем активного представителя старого типа
+      @panel_type_manager.clear_active_representative(old_type)
+      
+      @active_pane.show_terminal(path)
+      
+      # Показываем что стало после конвертации
+      new_type = @panel_type_manager.get_panel_type(@active_pane)
+      puts "Panel converted to #{new_type}"
+      
+      # Устанавливаем как активный представитель терминала
+      @panel_type_manager.set_active_representative(:terminal, @active_pane)
+      
+      # Обновляем статистику
+      stats = @panel_type_manager.get_panel_stats
+      puts "Panel stats after conversion: #{stats}"
+    end
+  end
+  
+  def handle_file_selection_from_tree(file_path)
+    if @panel_type_manager.should_create_new_panel_for_file?
+      # Находим самую широкую панель для разделения
+      widest_panel = @panel_type_manager.find_widest_panel
+      if widest_panel
+        @active_pane = widest_panel
+        split_horizontal
+        @active_pane.load_file(file_path)
+        @panel_type_manager.set_active_representative(:editor, @active_pane)
+      else
+        create_pane.load_file(file_path)
+      end
+    else
+      # Найти лучшую панель для редактора
+      best_editor = @panel_type_manager.find_best_editor_panel
+      if best_editor
+        best_editor.load_file(file_path)
+        best_editor.set_focus
+        @active_pane = best_editor
+        update_active_pane_styles
+        @panel_type_manager.set_active_representative(:editor, best_editor)
+      else
+        create_pane.load_file(file_path)
+      end
+    end
+  end
+  
+  def update_active_pane_styles
+    @panes.each { |pane| pane.set_inactive_style }
+    @active_pane.set_active_style if @active_pane
+  end
+
+  def convert_pane_to_editor
+    if @active_pane
+      old_type = @panel_type_manager.get_panel_type(@active_pane)
+      puts "Converting panel from #{old_type} to editor"
+      
+      # Очищаем активного представителя старого типа
+      @panel_type_manager.clear_active_representative(old_type)
+      
+      @active_pane.hide_file_tree
+      @active_pane.hide_terminal
+      
+      new_type = @panel_type_manager.get_panel_type(@active_pane)
+      puts "Panel converted to #{new_type}"
+      
+      # Устанавливаем как активный представитель редакторов
+      @panel_type_manager.set_active_representative(:editor, @active_pane)
+      
+      # Обновляем статистику
+      stats = @panel_type_manager.get_panel_stats
+      puts "Panel stats after conversion: #{stats}"
     end
   end
 
@@ -121,6 +212,12 @@ class EditorManager
     @active_pane = create_pane
     @container.set_root(@active_pane)
     @grid_mode = false
+    
+    # Устанавливаем как активный представитель редакторов
+    @panel_type_manager.set_active_representative(:editor, @active_pane)
+    
+    # Обновляем кнопку типа
+    @active_pane.update_type_button
   end
 
   def create_pane
@@ -130,7 +227,26 @@ class EditorManager
     # Убеждаемся что новая панель в правильном состоянии
     pane.ensure_correct_display_state
     
+    # Устанавливаем callback для файлового дерева для всех панелей
+    pane.set_file_tree_callback do |file_path|
+      handle_file_selection_from_tree(file_path)
+    end
+    
+    # Устанавливаем callback для скрытия popup при потере фокуса
+    pane.on_lose_focus do
+      if @current_popup
+        @current_popup.destroy
+        @current_popup = nil
+      end
+    end
+    
     pane.on_focus do |p| 
+      # Скрываем popup при смене активной панели
+      if @current_popup
+        @current_popup.destroy
+        @current_popup = nil
+      end
+      
       # Обновляем активную панель
       old_active = @active_pane
       @active_pane = p
@@ -138,6 +254,10 @@ class EditorManager
       # Обновляем стили
       @panes.each { |pane| pane.set_inactive_style }
       p.set_active_style
+      
+      # Обновляем активного представителя для типа панели
+      panel_type = @panel_type_manager.get_panel_type(p)
+      @panel_type_manager.set_active_representative(panel_type, p)
     end
     
     pane.on_modified { emit_modified }

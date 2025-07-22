@@ -1,6 +1,7 @@
 require 'gtk3'
 require 'vte3'
 require_relative 'code_editor'
+require_relative 'file_tree_panel'
 
 class EditorPane
   attr_reader :pane_id
@@ -22,11 +23,18 @@ class EditorPane
     @original_temp_file = nil
     @on_file_saved_callback = nil
     @on_history_callback = nil
+    @on_lose_focus_callback = nil
     
     # Состояние терминала
     @terminal_mode = false
     @terminal = nil
     @terminal_widget = nil
+    
+    # Состояние файлового дерева
+    @file_tree_mode = false
+    @file_tree = nil
+    @file_tree_widget = nil
+    @file_tree_callback = nil
     
     # История файлов для этого редактора
     @file_history = []
@@ -118,6 +126,10 @@ class EditorPane
     @on_history_callback = block
   end
 
+  def on_lose_focus(&block)
+    @on_lose_focus_callback = block
+  end
+
   def on_terminal(&block)
     @on_terminal_callback = block
   end
@@ -175,8 +187,9 @@ class EditorPane
     @terminal_mode = true
     @terminal.grab_focus
     
-    # Обновляем заголовок
+    # Обновляем заголовок и кнопку
     update_terminal_label(working_dir)
+    update_type_button
   end
 
   def hide_terminal
@@ -190,12 +203,118 @@ class EditorPane
     
     @terminal_mode = false
     
-    # Обновляем заголовок
+    # Обновляем заголовок и кнопку
     update_file_label
+    update_type_button
   end
 
   def terminal_mode?
     @terminal_mode
+  end
+
+  def show_file_tree(path = Dir.pwd)
+    return if @file_tree_mode
+    
+    begin
+      # Создаем файловое дерево если его нет
+      if @file_tree.nil?
+        @file_tree = FileTreePanel.new(path)
+        @file_tree_widget = @file_tree.widget
+        @box.pack_start(@file_tree_widget, expand: true, fill: true, padding: 0)
+        
+        # Подключаем обработчик изменения директории
+        @file_tree.on_directory_changed do |new_path|
+          update_file_tree_label(new_path)
+        end
+      else
+        @file_tree.change_directory(path)
+      end
+      
+      # Подключаем callback независимо от того, было ли дерево создано заново
+      if @file_tree_callback
+        @file_tree.on_file_selected do |file_path|
+          emit_lose_focus  # Скрываем popup при клике по файлу
+          @file_tree_callback.call(file_path)
+        end
+      end
+      
+      # Скрываем редактор и терминал
+      @current_editor.widget.hide
+      @terminal_widget.hide if @terminal_widget
+      
+      # Показываем файловое дерево
+      @file_tree_widget.show_all
+      @file_tree_mode = true
+      @terminal_mode = false
+      
+      # Обновляем заголовок и кнопку
+      update_file_tree_label(path)
+      update_type_button
+    rescue => e
+      puts "ERROR in show_file_tree: #{e.message}"
+      puts e.backtrace
+    end
+  end
+
+  def hide_file_tree
+    return unless @file_tree_mode
+    
+    # Скрываем файловое дерево
+    @file_tree_widget.hide if @file_tree_widget
+    
+    # Показываем редактор
+    @current_editor.widget.show
+    
+    @file_tree_mode = false
+    
+    # Обновляем заголовок и кнопку
+    update_file_label
+    update_type_button
+  end
+
+  def file_tree_mode?
+    @file_tree_mode
+  end
+  
+  def toggle_panel_type
+    if @file_tree_mode
+      # Переключаем из дерева в редактор
+      hide_file_tree
+      update_type_button
+    elsif @terminal_mode
+      # Переключаем из терминала в редактор
+      hide_terminal
+      update_type_button
+    else
+      # Переключаем из редактора в дерево
+      show_file_tree
+      update_type_button
+    end
+  end
+  
+  def update_type_button
+    if @file_tree_mode
+      @type_switch_label.set_text("📁")
+      @type_switch_label.override_color(:normal, Gdk::RGBA::new(0.4, 0.8, 0.4, 1.0))
+    elsif @terminal_mode
+      @type_switch_label.set_text("⚑")
+      @type_switch_label.override_color(:normal, Gdk::RGBA::new(0.8, 0.4, 0.4, 1.0))
+    else
+      @type_switch_label.set_text("📝")
+      @type_switch_label.override_color(:normal, Gdk::RGBA::new(0.4, 0.4, 0.8, 1.0))
+    end
+  end
+  
+  def current_file
+    @current_file
+  end
+  
+  def is_new_file
+    @is_new_file
+  end
+  
+  def set_file_tree_callback(&block)
+    @file_tree_callback = block
   end
 
   def toggle_terminal
@@ -255,16 +374,29 @@ class EditorPane
     if @terminal_mode
       # Должен отображаться терминал
       @current_editor.widget.hide
+      @file_tree_widget.hide if @file_tree_widget
       @terminal_widget.show_all if @terminal_widget
+    elsif @file_tree_mode
+      # Должно отображаться файловое дерево
+      @current_editor.widget.hide
+      @terminal_widget.hide if @terminal_widget
+      @file_tree_widget.show_all if @file_tree_widget
     else  
       # Должен отображаться редактор
       @terminal_widget.hide if @terminal_widget
+      @file_tree_widget.hide if @file_tree_widget
       @current_editor.widget.show_all
     end
   end
 
   def set_focus
-    @current_editor.widget.grab_focus
+    if @file_tree_mode && @file_tree_widget
+      @file_tree_widget.grab_focus
+    elsif @terminal_mode && @terminal
+      @terminal.grab_focus
+    else
+      @current_editor.widget.grab_focus
+    end
   end
 
   def set_active_style
@@ -372,7 +504,24 @@ class EditorPane
     @file_label.override_font(Pango::FontDescription.new('Monospace 8'))
     @file_info_box.pack_start(@file_label, expand: true, fill: true, padding: 0)
     
-    # Маленькая кнопочка-иконка
+    # Контейнер для кнопок
+    @buttons_box = Gtk::Box.new(:horizontal, 2)
+    
+    # Кнопка переключения типа панели
+    @type_switch_label = Gtk::Label.new("📁")
+    @type_switch_label.set_size_request(12, 12)
+    @type_switch_label.override_font(Pango::FontDescription.new('Sans 8'))
+    @type_switch_label.override_color(:normal, Gdk::RGBA::new(0.4, 0.8, 0.4, 1.0))
+    
+    @type_switch_button = Gtk::EventBox.new
+    @type_switch_button.add(@type_switch_label)
+    @type_switch_button.set_size_request(12, 12)
+    @type_switch_button.signal_connect('button-press-event') do |widget, event|
+      toggle_panel_type
+      true
+    end
+    
+    # Основная кнопка
     @test_button_label = Gtk::Label.new("■")
     @test_button_label.set_size_request(12, 12)
     @test_button_label.override_font(Pango::FontDescription.new('Sans 8'))
@@ -386,17 +535,9 @@ class EditorPane
       true
     end
     
-    # Эффект hover
-    @test_button.signal_connect('enter-notify-event') do
-      @test_button_label.override_color(:normal, Gdk::RGBA::new(0.9, 0.9, 0.9, 1.0))
-    end
-    
-    @test_button.signal_connect('leave-notify-event') do
-      @test_button_label.override_color(:normal, Gdk::RGBA::new(0.6, 0.6, 0.6, 1.0))
-    end
-    
-    # Контейнер для кнопок
-    @buttons_box = Gtk::Box.new(:horizontal, 2)
+    # Добавляем кнопки в контейнер
+    @buttons_box.pack_start(@type_switch_button, false, false, 0)
+    @buttons_box.pack_start(@test_button, false, false, 0)
     
     # Кнопки действий
     create_button("⊞", :new_file)     # Новый файл
@@ -406,7 +547,6 @@ class EditorPane
     create_button("⌘", :terminal)     # Терминал
     create_button("✗", :close)        # Закрыть
     
-    @buttons_box.pack_start(@test_button, expand: false, fill: false, padding: 0)
     @file_info_box.pack_end(@buttons_box, expand: false, fill: false, padding: 2)
     
     # Стилизация панели информации
@@ -428,11 +568,13 @@ class EditorPane
     # Обработчик клика для фокуса
     @box.signal_connect('button-press-event') do |widget, event|
       emit_focus
+      emit_lose_focus
       false
     end
     
     @current_editor.widget.signal_connect('button-press-event') do |widget, event|
       emit_focus
+      emit_lose_focus
       false
     end
   end
@@ -485,10 +627,21 @@ class EditorPane
     end
   end
 
+  def update_file_tree_label(path)
+    if @file_tree_mode
+      @file_label.text = "File Tree - #{File.basename(path)}"
+      @file_label.set_tooltip_text("File Tree - #{path}")
+    end
+  end
+
   private
 
   def emit_focus
     @on_focus_callback.call(self) if @on_focus_callback
+  end
+
+  def emit_lose_focus
+    @on_lose_focus_callback.call if @on_lose_focus_callback
   end
 
   public

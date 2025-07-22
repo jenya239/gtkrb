@@ -1,5 +1,5 @@
 require_relative 'base_panel'
-require_relative 'code_editor'
+require_relative '../widgets/code_editor'
 
 class EditorPanel < BasePanel
   def initialize

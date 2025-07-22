@@ -1,6 +1,6 @@
-require_relative 'editor_panel'
-require_relative 'terminal_panel'
-require_relative 'file_manager_panel'
+require_relative '../panels/editor_panel'
+require_relative '../panels/terminal_panel'
+require_relative '../panels/file_manager_panel'
 
 class PanelFactory
   # Создает панель указанного типа

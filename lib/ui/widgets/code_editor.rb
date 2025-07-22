@@ -1,7 +1,7 @@
 require 'gtk3'
 require 'gtksourceview3'
-require_relative '../../utils/language_manager'
-require_relative 'widgets/minimap'
+require_relative '../../../utils/language_manager'
+require_relative 'minimap'
 
 class CodeEditor
   def initialize
